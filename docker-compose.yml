@@ -1,0 +1,85 @@
+# ── soca-edge — Docker Compose ────────────────────────────────────────────────
+#
+# Repo: soca-edge   (contains soca-engine/ + soca-dashboard/)
+# Runs: soca-dashboard (8080) + soca-engine (8001) in one container + Redis
+#
+# Setup:
+#   1. cp .env.example .env  and fill in your values
+#   2. docker compose build
+#   3. docker compose up -d
+#
+# Full-stack deployment (all 3 repos together): see soca-deploy/
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── soca-edge: soca-dashboard + soca-engine ───────────────────────────────
+  soca-edge:
+    build:
+      context: .
+      dockerfile: docker/edge/Dockerfile
+    container_name: soca-edge
+    restart: unless-stopped
+    ports:
+      - "8001:8001"   # soca-engine REST API
+      - "8080:8080"   # soca-dashboard web UI
+    volumes:
+      - edge-models:/app/soca-engine/yolo           # YOLO model files
+      - edge-snapshots:/app/soca-engine/snapshots   # Local snapshot cache
+      - edge-dlq:/app/soca-engine/dlq               # Dead-letter queue
+      - edge-data:/app/data                         # Engine SQLite DB + config.json
+    environment:
+      # ── soca-engine ────────────────────────────────────────────────────────
+      EDGE_NAME: ${EDGE_NAME}
+      REDIS_URL: redis://redis:6379
+      PUBLISHER_TYPE: ${PUBLISHER_TYPE:-redis}
+      ENGINE_API_KEY: ${ENGINE_API_KEY}
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      GCS_KEY_PATH: ${GCS_KEY_PATH:-}
+      GCS_PATH_PREFIX: ${GCS_PATH_PREFIX:-}
+      PUBSUB_PROJECT_ID: ${PUBSUB_PROJECT_ID:-}
+      PUBSUB_TOPIC: ${PUBSUB_TOPIC:-}
+      PUBSUB_KEY_PATH: ${PUBSUB_KEY_PATH:-}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-4}
+      MAX_LOADED_MODELS: ${MAX_LOADED_MODELS:-3}
+      INFER_DEVICE: ${INFER_DEVICE:-cpu}
+      INFER_IMGSZ: ${INFER_IMGSZ:-640}
+      SNAPSHOT_JPEG_QUALITY: ${SNAPSHOT_JPEG_QUALITY:-60}
+      SNAPSHOT_MAX_WIDTH: ${SNAPSHOT_MAX_WIDTH:-1280}
+      DB_PATH: /app/data/soca_engine.db
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # ── soca-dashboard ──────────────────────────────────────────────────────
+      SECRET_KEY: ${DASHBOARD_SECRET_KEY}
+      DEBUG: ${DASHBOARD_DEBUG:-false}
+      ALLOWED_HOSTS: ${DASHBOARD_ALLOWED_HOSTS:-*}
+      ENGINE_BASE_URL: http://localhost:8001
+      ENGINE_DB_PATH: /app/data/soca_engine.db
+      ENGINE_SNAPSHOTS_DIR: /app/soca-engine/snapshots
+    depends_on:
+      - redis
+    networks:
+      - soca-net
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: soca-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    networks:
+      - soca-net
+
+volumes:
+  edge-models:     # YOLO model files (.pt, .onnx, .yaml)
+  edge-snapshots:  # Detection snapshot images
+  edge-dlq:        # Dead-letter queue files
+  edge-data:       # Engine SQLite DB + config.json
+  redis-data:      # Redis persistence
+
+networks:
+  soca-net:
+    driver: bridge
