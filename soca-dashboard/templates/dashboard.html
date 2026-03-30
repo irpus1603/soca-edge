@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SOCA{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title">Total Cameras</div>
+      <div class="stat-value text-primary">{{ total_cameras }}</div>
+      <div class="stat-desc">{{ active_cameras }} active</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title">Active Schedules</div>
+      <div class="stat-value text-secondary">{{ total_schedules }}</div>
+      <div class="stat-desc">{{ running_schedules }} running</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title">Engine</div>
+      <div class="stat-value text-sm font-mono {% if health.status == 'ok' %}text-success{% else %}text-error{% endif %}">{{ health.status|upper }}</div>
+      <div class="stat-desc">{{ health.active_jobs|default:0 }} jobs &middot;
+        {% if health.publisher_type == 'pubsub' %}
+          pubsub:
+          {% if health.pubsub.configured %}
+            <span class="text-success">{{ health.pubsub.project_id }}/{{ health.pubsub.topic }}</span>
+          {% else %}
+            <span class="text-warning">not configured</span>
+          {% endif %}
+        {% else %}
+          redis: <span class="{% if health.redis == 'connected' %}text-success{% else %}text-error{% endif %}">{{ health.redis|default:"unavailable" }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title">Uptime</div>
+      <div class="stat-value text-sm font-mono">{{ health.uptime_seconds|default:"—" }}s</div>
+      <div class="stat-desc">{{ health.edge_name|default:"—" }}</div>
+    </div>
+  </div>
+
+  <!-- System Resources -->
+  {% if system %}
+  <details class="collapse collapse-arrow bg-base-100 shadow-sm" open>
+    <summary class="collapse-title font-semibold text-base-content/80">System Resources</summary>
+    <div class="collapse-content pt-0">
+      <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-base-300">
+
+        <!-- CPU -->
+        <div class="py-4 md:px-5 md:py-2 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-50">CPU</span>
+            <span class="text-lg font-bold font-mono {% if system.cpu.percent > 80 %}text-error{% elif system.cpu.percent > 60 %}text-warning{% else %}text-success{% endif %}">{{ system.cpu.percent }}%</span>
+          </div>
+          <progress class="progress {% if system.cpu.percent > 80 %}progress-error{% elif system.cpu.percent > 60 %}progress-warning{% else %}progress-success{% endif %} w-full h-2"
+                    value="{{ system.cpu.percent }}" max="100"></progress>
+          <div class="text-xs opacity-50 space-y-0.5">
+            {% if cpu.model %}<div>{{ cpu.model }}</div>{% endif %}
+            <div>{{ cpu.cores_physical }} physical &middot; {{ cpu.cores_logical }} logical cores</div>
+            {% if cpu.freq_mhz.current %}<div>{{ cpu.freq_mhz.current }} MHz (max {{ cpu.freq_mhz.max }} MHz)</div>{% endif %}
+          </div>
+          {% if cpu.percent_per_core %}
+          <div class="flex gap-1.5 flex-wrap pt-1">
+            {% for pct in cpu.percent_per_core %}
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="text-xs font-mono opacity-60" style="font-size:10px">{{ pct|floatformat:0 }}%</span>
+              <progress class="progress progress-primary h-1.5" style="width:1.75rem" value="{{ pct }}" max="100"></progress>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Memory -->
+        <div class="py-4 md:px-5 md:py-2 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-50">Memory</span>
+            <span class="text-lg font-bold font-mono {% if system.memory.percent > 80 %}text-error{% elif system.memory.percent > 60 %}text-warning{% else %}text-success{% endif %}">{{ system.memory.percent }}%</span>
+          </div>
+          <progress class="progress {% if system.memory.percent > 80 %}progress-error{% elif system.memory.percent > 60 %}progress-warning{% else %}progress-success{% endif %} w-full h-2"
+                    value="{{ system.memory.percent }}" max="100"></progress>
+          <div class="text-xs opacity-50 space-y-0.5">
+            <div>Used: <span class="font-mono">{{ system.memory.used_mb }} MB</span></div>
+            <div>Total: <span class="font-mono">{{ system.memory.total_mb }} MB</span></div>
+            <div>Free: <span class="font-mono">{{ system.memory.total_mb|add:system.memory.used_mb|default:"—" }} MB</span></div>
+          </div>
+        </div>
+
+        <!-- Storage -->
+        <div class="py-4 md:px-5 md:py-2 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider opacity-50">Storage</span>
+            <span class="text-lg font-bold font-mono {% if system.storage.percent > 80 %}text-error{% elif system.storage.percent > 60 %}text-warning{% else %}text-success{% endif %}">{{ system.storage.percent }}%</span>
+          </div>
+          <progress class="progress {% if system.storage.percent > 80 %}progress-error{% elif system.storage.percent > 60 %}progress-warning{% else %}progress-success{% endif %} w-full h-2"
+                    value="{{ system.storage.percent }}" max="100"></progress>
+          <div class="text-xs opacity-50 space-y-0.5">
+            <div>Used: <span class="font-mono">{{ system.storage.used_gb }} GB</span></div>
+            <div>Total: <span class="font-mono">{{ system.storage.total_gb }} GB</span></div>
+            <div>Free: <span class="font-mono">{{ system.storage.free_gb }} GB</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </details>
+
+  <!-- Network -->
+  {% if system.network %}
+  <details class="collapse collapse-arrow bg-base-100 shadow-sm">
+    <summary class="collapse-title font-semibold text-base-content/80">Network Interfaces</summary>
+    <div class="collapse-content">
+      <table class="table table-sm mt-1">
+        <thead>
+          <tr><th>Interface</th><th>IP</th><th>Status</th><th>Speed</th><th class="text-right">Sent</th><th class="text-right">Received</th></tr>
+        </thead>
+        <tbody>
+          {% for iface in system.network %}
+          <tr>
+            <td class="font-mono text-xs font-semibold">{{ iface.name }}</td>
+            <td class="font-mono text-xs">{{ iface.ip }}</td>
+            <td><span class="badge badge-sm {% if iface.is_up %}badge-success{% else %}badge-error{% endif %}">{% if iface.is_up %}UP{% else %}DOWN{% endif %}</span></td>
+            <td class="text-xs opacity-60">{% if iface.speed_mbps %}{{ iface.speed_mbps }} Mbps{% else %}—{% endif %}</td>
+            <td class="text-xs text-right font-mono">{{ iface.sent_mb }} MB</td>
+            <td class="text-xs text-right font-mono">{{ iface.recv_mb }} MB</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
+  {% endif %}
+
+  <!-- Running Schedules -->
+  <details class="collapse collapse-arrow bg-base-100 shadow-sm" open>
+    <summary class="collapse-title font-semibold text-base-content/80 flex items-center justify-between">
+      Running Schedules
+      <a href="{% url 'schedule_list' %}" class="btn btn-ghost btn-xs mr-6" onclick="event.stopPropagation()">View all →</a>
+    </summary>
+    <div class="collapse-content">
+      {% if jobs %}
+      <table class="table table-sm mt-1">
+        <thead>
+          <tr><th>Job ID</th><th>Status</th><th>Camera ID</th><th>Frames</th><th>Events</th></tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td class="font-mono text-xs">{{ job.job_id }}</td>
+            <td><span class="badge badge-success badge-sm">{{ job.status }}</span></td>
+            <td class="font-mono text-xs">{{ job.camera_id|default:"—" }}</td>
+            <td class="text-xs">{{ job.frames_processed|default:"—" }}</td>
+            <td class="text-xs">{{ job.events_triggered|default:"—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-sm opacity-50 text-center py-6">No running schedules</p>
+      {% endif %}
+    </div>
+  </details>
+
+</div>
+{% endblock %}

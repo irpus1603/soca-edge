@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.so
+.python-version
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+
+venv.bak/
+
+# Database
+#*.db
+#*.sqlite3
+#*.sqlite3-journal
+
+# Redis
+dump.rdb
+
+# snapshot
+snapshots/
+
+# Logs
+*.log
+
+# YOLO / ML models
+yolo/*.pt
+yolo/*.onnx
+yolo/*.engine
+yolo/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# Claude
+claude-plan/
+.pytest_cache
+.claude
+
+pytest.ini
+
+config.json
+credentials/

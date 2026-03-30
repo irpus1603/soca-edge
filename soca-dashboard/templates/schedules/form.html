@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+{% block title %}{% if schedule %}Edit{% else %}New{% endif %} Schedule{% endblock %}
+
+{% block content %}
+<style>
+  .rule-body { display: none; }
+  .rule-body.open { display: grid; }
+</style>
+
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-xl font-bold">{% if schedule %}Edit Schedule: {{ schedule.name }}{% else %}New Schedule{% endif %}</h1>
+  <a href="{% url 'schedule_list' %}" class="btn btn-ghost btn-sm">← Back</a>
+</div>
+
+<!-- MAIN SCHEDULE FORM -->
+<form method="post" id="scheduleForm">
+  {% csrf_token %}
+  <input type="hidden" name="roi_points" id="roi_points" value="{{ schedule.roi_points|default:'[]'|safe }}">
+  <input type="hidden" name="roi_type" id="roi_type_hidden" value="{{ schedule.roi_type|default:'POLYGON' }}">
+  <!-- Legacy aging fields preserved as hidden so existing schedules keep their values -->
+  <input type="hidden" name="aging_window" value="{{ schedule.aging_window|default:60 }}">
+  <input type="hidden" name="aging_cooldown" value="{{ schedule.aging_cooldown|default:60 }}">
+  <input type="hidden" name="min_count" value="{{ schedule.min_count|default:1 }}">
+  <input type="hidden" name="alert_category" value="{{ schedule.alert_category|default:'' }}">
+
+  <div class="space-y-4">
+
+    <!-- BASIC -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-base-content/60 mb-3">Basic</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Name</span></label>
+            <input type="text" name="name" class="input input-bordered input-sm" value="{{ schedule.name|default:'' }}" required>
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Camera</span></label>
+            <select name="camera" id="camera-select" class="select select-bordered select-sm" required>
+              <option value="">— Select Camera —</option>
+              {% for cam in cameras %}
+                <option value="{{ cam.pk }}" {% if schedule and schedule.camera_id == cam.pk %}selected{% endif %}>
+                  {{ cam.name }}{% if cam.site_name %} — {{ cam.site_name }}{% if cam.floor %}, {{ cam.floor }}{% endif %}{% if cam.location %} · {{ cam.location }}{% endif %}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Model Path</span></label>
+            {% if models %}
+            <select name="model_path" id="modelPathInput" class="select select-bordered select-sm">
+              {% for m in models %}
+              <option value="{{ m.path }}" {% if schedule and schedule.model_path == m.path %}selected{% endif %}>{{ m.name }}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" name="model_path" id="modelPathInput" class="input input-bordered input-sm"
+                   value="{{ schedule.model_path|default:'yolo/yolo11n.pt' }}">
+            {% endif %}
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="cursor-pointer label justify-start gap-3">
+            <input type="checkbox" name="is_active" class="checkbox checkbox-sm" {% if not schedule or schedule.is_active %}checked{% endif %}>
+            <span class="label-text">Active</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- INFERENCE -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-base-content/60 mb-3">Inference</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Confidence ≥</span></label>
+            <input type="number" name="conf_threshold" class="input input-bordered input-sm" step="0.01" min="0" max="1"
+                   value="{{ schedule.conf_threshold|default:'0.5' }}">
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">IOU</span></label>
+            <input type="number" name="iou_threshold" class="input input-bordered input-sm" step="0.01" min="0" max="1"
+                   value="{{ schedule.iou_threshold|default:'0.45' }}">
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Frame Interval (ms)</span></label>
+            <input type="number" name="frame_interval_ms" class="input input-bordered input-sm" min="33"
+                   value="{{ schedule.frame_interval_ms|default:'1000' }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROI -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-base-content/60 mb-3">Region of Interest (ROI)</h2>
+
+        <div class="form-control mb-4">
+          <label class="label py-1"><span class="label-text font-medium">ROI Type</span></label>
+          <div class="flex flex-wrap gap-6">
+            <label class="label cursor-pointer gap-2">
+              <input type="radio" name="roi_type" value="POLYGON" class="radio radio-primary"
+                {% if not schedule or schedule.roi_type == 'POLYGON' %}checked{% endif %}
+                onchange="setRoiMode('POLYGON')" />
+              <span class="label-text">Polygon</span>
+            </label>
+            <label class="label cursor-pointer gap-2">
+              <input type="radio" name="roi_type" value="RECT" class="radio radio-primary"
+                {% if schedule and schedule.roi_type == 'RECT' %}checked{% endif %}
+                onchange="setRoiMode('RECT')" />
+              <span class="label-text">Rectangle</span>
+            </label>
+            <label class="label cursor-pointer gap-2">
+              <input type="radio" name="roi_type" value="LINE" class="radio radio-warning"
+                {% if schedule and schedule.roi_type == 'LINE' %}checked{% endif %}
+                onchange="setRoiMode('LINE')" />
+              <span class="label-text text-warning">Crossing Line</span>
+              <span class="badge badge-warning badge-xs">People Counting</span>
+            </label>
+          </div>
+          <!-- Direction — shown only when Crossing Line is selected -->
+          <div id="crossing-direction-row" class="mt-3 flex items-center gap-3"
+               {% if not schedule or schedule.roi_type != 'LINE' %}style="display:none"{% endif %}>
+            <label class="label-text text-sm">Direction</label>
+            <select name="crossing_direction" id="crossing_direction_sel"
+                    class="select select-bordered select-sm">
+              <option value="any"           {% if not schedule or schedule.crossing_direction == 'any' %}selected{% endif %}>Any direction</option>
+              <option value="left_to_right"  {% if schedule and schedule.crossing_direction == 'left_to_right' %}selected{% endif %}>Left → Right (counts as IN)</option>
+              <option value="right_to_left"  {% if schedule and schedule.crossing_direction == 'right_to_left' %}selected{% endif %}>Right → Left (counts as IN)</option>
+              <option value="top_to_bottom"  {% if schedule and schedule.crossing_direction == 'top_to_bottom' %}selected{% endif %}>Top → Bottom (counts as IN)</option>
+              <option value="bottom_to_top"  {% if schedule and schedule.crossing_direction == 'bottom_to_top' %}selected{% endif %}>Bottom → Top (counts as IN)</option>
+            </select>
+            <span class="text-xs text-base-content/40">used by People Counting rules as default</span>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <label class="label-text font-medium">Draw ROI</label>
+            <div class="flex gap-2">
+              <span id="roi-hint" class="text-xs opacity-60">Click to add polygon points</span>
+              <button type="button" onclick="clearRoi()" class="btn btn-ghost btn-xs">Clear</button>
+            </div>
+          </div>
+          <canvas id="roi-canvas" width="640" height="360"
+            class="border border-base-300 rounded-lg cursor-crosshair w-full"
+            style="max-width:640px; background:#1a1a2e;">
+          </canvas>
+        </div>
+
+        <div class="text-xs opacity-50 font-mono" id="roi-preview"></div>
+      </div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-base-content/60 mb-3">Output &amp; Notifications</h2>
+
+        <div class="flex flex-wrap gap-6 mb-4">
+          <label class="label cursor-pointer gap-2">
+            <input type="checkbox" name="save_snapshot" class="checkbox checkbox-sm"
+              {% if not schedule or schedule.save_snapshot %}checked{% endif %} />
+            <span class="label-text">Save Snapshots</span>
+          </label>
+          <label class="label cursor-pointer gap-2">
+            <input type="checkbox" name="enable_monitor" class="checkbox checkbox-sm"
+              {% if not schedule or schedule.enable_monitor %}checked{% endif %} />
+            <span class="label-text">Enable Monitor</span>
+          </label>
+          <label class="label cursor-pointer gap-2">
+            <input type="checkbox" name="publish_redis" class="checkbox checkbox-sm"
+              {% if not schedule or schedule.publish_redis %}checked{% endif %}
+              onchange="toggleRedisFields(this)" />
+            <span class="label-text">Publish to Queue</span>
+          </label>
+        </div>
+
+        <div id="redis-fields" class="grid grid-cols-1 gap-4 mb-4" style="{% if schedule and not schedule.publish_redis %}display:none{% endif %}">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text">Redis Stream</span></label>
+            <input type="text" name="redis_stream" value="{{ schedule.redis_stream|default:'soca:detections' }}" class="input input-bordered input-sm font-mono" />
+          </div>
+        </div>
+
+        <div class="form-control mt-2">
+          <label class="label py-1"><span class="label-text">Alert Message Template</span></label>
+          <textarea name="snapshot_message" rows="2" class="textarea textarea-bordered font-mono text-sm"
+            placeholder="{in_roi_count} object(s) detected at {time}">{{ schedule.snapshot_message|default:'{in_roi_count} object(s) detected at {time}' }}</textarea>
+          <label class="label">
+            <span class="label-text-alt opacity-60">
+              Placeholders: <code>{count}</code> total &nbsp;·&nbsp;
+              <code>{in_roi_count}</code> in ROI &nbsp;·&nbsp;
+              <code>{time}</code> timestamp &nbsp;·&nbsp;
+              <code>{camera_id}</code> &nbsp;·&nbsp;
+              <code>{category}</code>
+            </span>
+          </label>
+        </div>
+        <!-- LPR Model Path -->
+        <div class="form-control mt-3">
+          <label class="label py-1">
+            <span class="label-text">LPR Model Path</span>
+            <span class="label-text-alt text-xs opacity-50">optional — for vehicle plate reading</span>
+          </label>
+          <input type="text" name="lpr_model_path"
+                 value="{{ schedule.lpr_model_path|default:'' }}"
+                 class="input input-bordered input-sm font-mono"
+                 placeholder="yolo/plate_det.pt  (leave blank to disable LPR)" />
+          <label class="label py-0">
+            <span class="label-text-alt opacity-50">Path to YOLO plate detection model. EasyOCR will read the text from detected plates.</span>
+          </label>
+        </div>
+
+        <p class="text-xs text-base-content/40 mt-2">
+          Notification destinations (Telegram, Redis) are configured in
+          <a href="{% url 'settings' %}" class="link link-primary">Settings → Edge</a>
+          and enabled per-rule below.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="flex gap-3 mt-6">
+    <button type="submit" class="btn btn-primary">{% if schedule %}Save Changes{% else %}Create Schedule{% endif %}</button>
+    <a href="{% url 'schedule_list' %}" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+
+<!-- RULES SECTION — outside main form so rule sub-forms are valid HTML -->
+{% if schedule %}
+<div class="card bg-base-100 shadow-sm mt-4">
+  <div class="card-body p-4">
+    <h2 class="font-semibold text-sm uppercase tracking-wide text-base-content/60 mb-3">Rules</h2>
+    <div id="rulesContainer" class="space-y-3">
+
+      {% for rule in rules %}
+      <div class="rule-card border border-base-300 rounded-lg" data-rule-id="{{ rule.pk }}">
+        <div class="flex items-center justify-between p-3 bg-base-200 rounded-t-lg">
+          <span class="font-medium text-sm cursor-pointer" onclick="toggleRule(this.closest('.rule-card').querySelector('.rule-body'))">
+            <span class="rule-title">{{ rule.name }}</span>
+          </span>
+          <div class="flex items-center gap-2">
+            {% if rule.is_active %}
+              <span class="badge badge-success badge-sm">active</span>
+            {% else %}
+              <span class="badge badge-warning badge-sm">inactive</span>
+            {% endif %}
+            <form method="post" action="{% url 'rule_delete' pk=schedule.pk rid=rule.pk %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-xs text-error" onclick="return confirm('Delete this rule?')">×</button>
+            </form>
+          </div>
+        </div>
+        <form method="post" action="{% url 'rule_save' pk=schedule.pk %}">
+          {% csrf_token %}
+          <div class="rule-body open p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {% include "schedules/_rule_fields.html" with rule=rule schedule=schedule %}
+            <div class="md:col-span-3 flex justify-end">
+              <button type="submit" class="btn btn-primary btn-sm">Save Rule</button>
+            </div>
+          </div>
+        </form>
+      </div>
+      {% endfor %}
+
+    </div>
+
+    <!-- New Rule form (hidden by default) -->
+    <div id="newRuleForm" class="rule-card border border-primary/30 rounded-lg mt-3" style="display:none">
+      <div class="flex items-center justify-between p-3 bg-primary/5 rounded-t-lg">
+        <span class="font-medium text-sm text-base-content/50 rule-title-display">New Rule</span>
+        <button type="button" onclick="hideNewRule()" class="btn btn-ghost btn-xs">×</button>
+      </div>
+      <form method="post" action="{% url 'rule_save' pk=schedule.pk %}">
+        {% csrf_token %}
+        <div class="rule-body open p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {% include "schedules/_rule_fields.html" with rule=None schedule=schedule %}
+          <div class="md:col-span-3 flex justify-end">
+            <button type="submit" class="btn btn-primary btn-sm">Save Rule</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <button type="button" onclick="showNewRule()" class="btn btn-outline btn-sm mt-3 w-full">
+      + Add Rule
+    </button>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ROI Canvas Editor
+const canvas = document.getElementById('roi-canvas');
+const ctx = canvas.getContext('2d');
+const hiddenInput = document.getElementById('roi_points');
+const preview = document.getElementById('roi-preview');
+const hintEl = document.getElementById('roi-hint');
+
+let roiMode = '{{ schedule.roi_type|default:"POLYGON" }}';
+let points = [];
+let rectStart = null;
+let isDragging = false;
+let activeCrossingInput = null;  // rule input being drawn
+let linePoints = [];             // in-progress crossing line pixel coords
+let preRoiMode = roiMode;        // mode to restore after line draw
+
+// Load existing normalized points → convert to canvas pixels for display
+try {
+  const raw = JSON.parse(hiddenInput.value);
+  if (raw && raw.length > 0) {
+    points = raw.map(([x, y]) => [Math.round(x * canvas.width), Math.round(y * canvas.height)]);
+  }
+} catch(e) { points = []; }
+
+// If initial mode is LINE, set preRoiMode to POLYGON (restored after rule-draw)
+if (roiMode === 'LINE') preRoiMode = 'POLYGON';
+
+function storeNormalized() {
+  const norm = points.map(([x, y]) => [
+    parseFloat((x / canvas.width).toFixed(5)),
+    parseFloat((y / canvas.height).toFixed(5))
+  ]);
+  hiddenInput.value = JSON.stringify(norm);
+}
+
+function setRoiMode(mode) {
+  roiMode = mode;
+  if (mode !== 'LINE') preRoiMode = mode;
+  activeCrossingInput = null;
+  linePoints = [];
+  points = [];
+  rectStart = null;
+  isDragging = false;
+  hiddenInput.value = '[]';
+  document.getElementById('roi_type_hidden').value = mode;
+
+  const dirRow = document.getElementById('crossing-direction-row');
+  if (dirRow) dirRow.style.display = mode === 'LINE' ? '' : 'none';
+
+  if (mode === 'LINE') {
+    hintEl.textContent = 'Click 2 points on the canvas to draw the crossing line';
+    // Immediately activate LINE drawing
+    roiMode = 'LINE';
+  } else {
+    hintEl.textContent = mode === 'POLYGON' ? 'Click to add polygon points' : 'Click and drag to draw rectangle';
+  }
+  draw();
+}
+
+function clearRoi() {
+  points = [];
+  linePoints = [];
+  rectStart = null;
+  isDragging = false;
+  hiddenInput.value = '[]';
+  preview.textContent = '';
+  if (roiMode === 'LINE') {
+    hintEl.textContent = 'Click 2 points on the canvas to draw the crossing line';
+  }
+  draw();
+}
+
+function scalePoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return [
+    Math.round((e.clientX - rect.left) * scaleX),
+    Math.round((e.clientY - rect.top) * scaleY)
+  ];
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const [x, y] = scalePoint(e);
+  if (roiMode === 'POLYGON') {
+    points.push([x, y]);
+    storeNormalized();
+    draw();
+  } else if (roiMode === 'RECT') {
+    rectStart = [x, y];
+    isDragging = true;
+  } else if (roiMode === 'LINE') {
+    linePoints.push([x, y]);
+    if (linePoints.length >= 2) {
+      const norm = linePoints.map(([px, py]) => [
+        parseFloat((px / canvas.width).toFixed(5)),
+        parseFloat((py / canvas.height).toFixed(5))
+      ]);
+      if (activeCrossingInput) {
+        // Drawing for a specific rule's crossing_line input
+        activeCrossingInput.value = JSON.stringify(norm);
+        activeCrossingInput = null;
+        linePoints = [];
+        roiMode = preRoiMode;
+        const radio = document.querySelector(`input[name="roi_type"][value="${preRoiMode}"]`);
+        if (radio) radio.checked = true;
+        hintEl.textContent = preRoiMode === 'POLYGON' ? 'Click to add polygon points' : 'Click and drag to draw rectangle';
+      } else {
+        // Drawing schedule-level crossing line (roi_type=LINE)
+        hiddenInput.value = JSON.stringify(norm);
+        points = norm.map(([nx, ny]) => [Math.round(nx * canvas.width), Math.round(ny * canvas.height)]);
+        linePoints = [];
+        hintEl.textContent = 'Crossing line set — click to redraw';
+      }
+    }
+    draw();
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const [x, y] = scalePoint(e);
+  if (roiMode === 'RECT' && isDragging && rectStart) {
+    draw([rectStart, [x, y]], null);
+  } else if (roiMode === 'LINE' && linePoints.length === 1) {
+    draw(null, [linePoints[0], [x, y]]);
+  }
+});
+
+canvas.addEventListener('mouseup', (e) => {
+  if (roiMode === 'RECT' && isDragging && rectStart) {
+    const [x, y] = scalePoint(e);
+    points = [rectStart, [x, y]];
+    rectStart = null;
+    isDragging = false;
+    storeNormalized();
+    draw();
+  }
+});
+
+// Right-click to remove last polygon point
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (roiMode === 'POLYGON' && points.length > 0) {
+    points.pop();
+    storeNormalized();
+    draw();
+  }
+});
+
+function toggleRedisFields(cb) {
+  document.getElementById('redis-fields').style.display = cb.checked ? '' : 'none';
+}
+
+// Camera snapshot as canvas background
+let bgImage = null;
+function loadSnapshot(cameraId) {
+  if (!cameraId) return;
+  const img = new Image();
+  img.onload = () => { bgImage = img; draw(); };
+  img.onerror = () => { bgImage = null; draw(); };
+  img.src = `/cameras/${cameraId}/snapshot/`;
+}
+
+function draw(tempRect, tempLine) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (bgImage) {
+    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 64) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 36) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+  }
+  // Determine effective ROI mode
+  // If roiMode=LINE AND activeCrossingInput is set → temporary rule draw (show existing ROI behind)
+  // If roiMode=LINE AND activeCrossingInput is null → schedule-level crossing line mode
+  const isScheduleLine = (roiMode === 'LINE' && !activeCrossingInput);
+  const effectiveMode = (roiMode === 'LINE' && activeCrossingInput) ? preRoiMode : roiMode;
+
+  // Schedule-level crossing line: draw points as an amber dashed line
+  if (isScheduleLine && points.length === 2) {
+    const p1 = points[0], p2 = points[1];
+    ctx.save();
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3; ctx.setLineDash([8, 4]);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f59e0b';
+    [p1, p2].forEach(([px, py]) => { ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI*2); ctx.fill(); });
+    // Arrow in the middle to show direction
+    const mx = (p1[0]+p2[0])/2, my = (p1[1]+p2[1])/2;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px monospace';
+    ctx.fillText('⇔', mx - 8, my + 5);
+    ctx.restore();
+  }
+
+  if (effectiveMode === 'POLYGON' && points.length > 0) {
+    ctx.fillStyle = 'rgba(59,130,246,0.2)';
+    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    if (roiMode !== 'LINE') {
+      points.forEach((p, i) => {
+        ctx.fillStyle = i === 0 ? '#f59e0b' : '#3b82f6';
+        ctx.beginPath(); ctx.arc(p[0], p[1], 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '10px monospace';
+        ctx.fillText(i + 1, p[0] + 7, p[1] + 4);
+      });
+    }
+  } else if (effectiveMode === 'RECT') {
+    const drawPoints = tempRect || points;
+    if (drawPoints.length === 2) {
+      const [x1,y1] = drawPoints[0], [x2,y2] = drawPoints[1];
+      ctx.fillStyle = 'rgba(59,130,246,0.2)';
+      ctx.fillRect(x1, y1, x2-x1, y2-y1);
+      ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([]);
+      ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+      if (roiMode !== 'LINE') {
+        ctx.fillStyle = '#3b82f6';
+        [[x1,y1],[x2,y1],[x2,y2],[x1,y2]].forEach(([px,py]) => {
+          ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+        });
+      }
+    }
+  }
+
+  // --- Draw all saved crossing lines (from rule inputs) ---
+  document.querySelectorAll('input[name="crossing_line"]').forEach(inp => {
+    try {
+      const line = JSON.parse(inp.value || '[]');
+      if (line.length === 2) {
+        const p1 = [line[0][0] * canvas.width, line[0][1] * canvas.height];
+        const p2 = [line[1][0] * canvas.width, line[1][1] * canvas.height];
+        ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(p1[0], p1[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath(); ctx.arc(p1[0], p1[1], 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p2[0], p2[1], 4, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+    } catch(e) {}
+  });
+
+  // --- Draw in-progress crossing line (preview while moving) ---
+  if (tempLine && tempLine.length === 2) {
+    ctx.save();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(tempLine[0][0], tempLine[0][1]);
+    ctx.lineTo(tempLine[1][0], tempLine[1][1]);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // First anchor point while waiting for second click
+  if (roiMode === 'LINE' && linePoints.length === 1) {
+    ctx.save();
+    ctx.fillStyle = '#f59e0b';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(linePoints[0][0], linePoints[0][1], 5, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  // Line mode hint badge on canvas
+  if (roiMode === 'LINE') {
+    ctx.save();
+    ctx.fillStyle = 'rgba(245,158,11,0.85)';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(8, 8, 220, 22, 4) : ctx.rect(8, 8, 220, 22);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(linePoints.length === 0 ? '✎ Click 1st point for crossing line' : '✎ Click 2nd point to finish', 14, 23);
+    ctx.restore();
+  }
+
+  preview.textContent = points.length && roiMode !== 'LINE' ? 'Points: ' + JSON.stringify(points) : '';
+}
+
+// Camera select → load snapshot
+const camSelect = document.getElementById('camera-select');
+if (camSelect) {
+  camSelect.addEventListener('change', () => loadSnapshot(camSelect.value));
+  loadSnapshot(camSelect.value);
+}
+
+// Initial draw
+hintEl.textContent = roiMode === 'POLYGON' ? 'Click to add polygon points'
+  : roiMode === 'RECT' ? 'Click and drag to draw rectangle'
+  : points.length === 2 ? 'Crossing line set — click to redraw'
+  : 'Click 2 points on the canvas to draw the crossing line';
+draw();
+
+// Rules JS
+function toggleRule(body) {
+  body.classList.toggle('open');
+}
+
+function showNewRule() {
+  document.getElementById('newRuleForm').style.display = '';
+  document.getElementById('newRuleForm').querySelector('.rule-body').classList.add('open');
+}
+
+function hideNewRule() {
+  document.getElementById('newRuleForm').style.display = 'none';
+}
+
+function updateRuleTitle(input) {
+  const card = input.closest('.rule-card');
+  if (card) {
+    const titleEl = card.querySelector('.rule-title, .rule-title-display');
+    if (titleEl) titleEl.textContent = input.value || 'New Rule';
+  }
+}
+
+function toggleDuration(sel) {
+  const row = sel.closest('.flex');
+  const secInput = row.querySelector('.duration-sec');
+  const label = row.querySelector('.duration-label');
+  const show = sel.value !== 'immediate';
+  if (secInput) secInput.style.display = show ? '' : 'none';
+  if (label) label.style.display = show ? '' : 'none';
+}
+
+function toggleAbsentDuration(sel) {
+  const card = sel.closest('.rule-card, #newRuleForm');
+  const hint = card ? card.querySelector('.trigger-hint') : null;
+  const modeHint = card ? card.querySelector('.duration-mode-hint') : null;
+  if (hint) hint.textContent = sel.value === 'absent'
+    ? 'Fire when NOT detected for the duration below.'
+    : 'Fire when detected matching the conditions above.';
+  if (modeHint) modeHint.textContent = sel.value === 'absent' ? 'absent for ≥' : 'present for';
+}
+
+function updateCronPreview(input) {
+  const previewEl = input.closest('.flex').querySelector('.cron-preview');
+  if (!previewEl) return;
+  const val = input.value.trim();
+  previewEl.textContent = (val === '* * * * *' || !val) ? 'Always active' : val;
+}
+
+// Load class labels for all cls-checkboxes
+function loadLabels(modelPath) {
+  if (!modelPath) return;
+  fetch(`/api/models/labels/?path=${encodeURIComponent(modelPath)}`)
+    .then(r => r.json())
+    .then(data => {
+      const labels = data.labels || [];
+      document.querySelectorAll('.cls-checkboxes').forEach(container => {
+        let selected = [];
+        try { selected = JSON.parse(container.dataset.selected || '[]'); } catch(e) {}
+        container.innerHTML = '';
+        if (labels.length === 0) {
+          container.innerHTML = '<span class="text-base-content/30 text-xs">No labels found</span>';
+          return;
+        }
+        labels.forEach(lbl => {
+          const checked = selected.includes(lbl.id) ? 'checked' : '';
+          container.innerHTML += `<label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" name="cls_ids" value="${lbl.id}" ${checked} class="checkbox checkbox-xs">
+            <span class="text-xs">${lbl.name} (${lbl.id})</span>
+          </label>`;
+        });
+      });
+    })
+    .catch(() => {
+      document.querySelectorAll('.cls-checkboxes').forEach(c => {
+        c.innerHTML = '<span class="text-base-content/30 text-xs">Could not load labels</span>';
+      });
+    });
+}
+
+const modelPathInput = document.getElementById('modelPathInput');
+if (modelPathInput) {
+  loadLabels(modelPathInput.value);
+  modelPathInput.addEventListener('change', () => loadLabels(modelPathInput.value));
+}
+
+// Placeholder badge click → insert into nearest message_template input
+document.addEventListener('click', e => {
+  const badge = e.target.closest('.msg-ph');
+  if (!badge) return;
+  const input = badge.closest('.form-control').querySelector('input[name="message_template"]');
+  if (!input) return;
+  const val = badge.textContent;
+  const s = input.selectionStart, end = input.selectionEnd;
+  input.value = input.value.slice(0, s) + val + input.value.slice(end);
+  input.selectionStart = input.selectionEnd = s + val.length;
+  input.focus();
+});
+</script>
+
+<style>
+.msg-ph {
+  font-size: 10px;
+  color: oklch(var(--p) / 0.7);
+  background: oklch(var(--p) / 0.1);
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.msg-ph:hover { background: oklch(var(--p) / 0.2); }
+</style>
+{% endblock %}

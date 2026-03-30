@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Monitor — SOCA{% endblock %}
+{% block page_title %}Live Monitor{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-xl font-bold">Live Streams</h2>
+      <p class="text-sm opacity-60">{{ streams|length }} stream{% if streams|length != 1 %}s{% endif %} running</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="reload-countdown" class="text-xs opacity-50 font-mono"></span>
+      <a href="{% url 'schedule_list' %}" class="btn btn-ghost btn-sm">Manage Schedules →</a>
+    </div>
+  </div>
+
+  {% if streams %}
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for s in streams %}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body p-3">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="font-semibold text-sm">{{ s.schedule_name }}</p>
+            <p class="text-xs opacity-50">{{ s.camera_name }}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-success badge-sm gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-success-content animate-pulse inline-block"></span>
+              LIVE
+            </span>
+            <a href="{{ s.stream_url }}"
+               onclick="window.open(this.href,'stream_{{ s.job_id }}','width=854,height=480,resizable=yes,scrollbars=no,toolbar=no,menubar=no,status=no'); return false;"
+               class="btn btn-xs btn-ghost opacity-60 hover:opacity-100"
+               title="Open stream in popup window">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+        <img src="{{ s.stream_url }}?t={{ s.job_id }}"
+             alt="Live stream — {{ s.schedule_name }}"
+             class="stream-img w-full rounded-lg border border-base-300 bg-black cursor-pointer"
+             style="aspect-ratio:16/9; object-fit:contain;"
+             onclick="window.open('{{ s.stream_url }}','stream_{{ s.job_id }}','width=854,height=480,resizable=yes,scrollbars=no,toolbar=no,menubar=no,status=no')" />
+        <div class="mt-2 flex items-center justify-between">
+          <span class="font-mono text-xs opacity-40">{{ s.job_id }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="card bg-base-100 shadow">
+    <div class="card-body text-center py-16 opacity-50">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+      <p class="text-sm">No live streams available</p>
+      <p class="text-xs mt-1">Start a schedule with "Enable Monitor" turned on</p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+  // Force fresh connection on page load (busts browser cache)
+  document.querySelectorAll('.stream-img').forEach(function (img) {
+    img.src = img.src.replace(/\?t=.*/, '') + '?t=' + Date.now();
+    img.onerror = function () {
+      setTimeout(function () { img.src = img.src.replace(/\?t=.*/, '') + '?t=' + Date.now(); }, 3000);
+    };
+  });
+
+  // Auto-reload page every 30s to pick up new/stopped streams
+  var n = 30;
+  var el = document.getElementById('reload-countdown');
+  setInterval(function () {
+    n -= 1;
+    el.textContent = 'Refreshing in ' + n + 's';
+    if (n <= 0) location.reload();
+  }, 1000);
+</script>
+{% endblock %}

@@ -1,0 +1,227 @@
+{% if rule.pk %}
+<input type="hidden" name="rule_id" value="{{ rule.pk }}">
+{% else %}
+<input type="hidden" name="rule_id" value="">
+{% endif %}
+
+<div class="col-span-full space-y-3">
+
+  <!-- CARD 1: DETECTION CONDITIONS -->
+  <div class="border border-base-300 rounded-lg p-3 space-y-3">
+    <div class="text-xs font-semibold uppercase tracking-wide text-base-content/40">Detection Conditions</div>
+
+    <!-- Name + Category -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Rule Name *</span></label>
+        <input type="text" name="rule_name" class="input input-bordered input-xs rule-name-input"
+               oninput="updateRuleTitle(this)"
+               value="{{ rule.name|default:'' }}" placeholder="e.g. Person in Zone A" required>
+      </div>
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Category</span></label>
+        <select name="rule_category" class="select select-bordered select-xs">
+          <option value="Intrusion" {% if rule.category == 'Intrusion' or not rule.category %}selected{% endif %}>Intrusion</option>
+          <option value="PPE"       {% if rule.category == 'PPE' %}selected{% endif %}>PPE</option>
+          <option value="Detection" {% if rule.category == 'Detection' %}selected{% endif %}>Detection</option>
+          <option value="Crowd"     {% if rule.category == 'Crowd' %}selected{% endif %}>Crowd</option>
+          <option value="Counting"  {% if rule.category == 'Counting' %}selected{% endif %}>Counting</option>
+          <option value="LPR"       {% if rule.category == 'LPR' %}selected{% endif %}>LPR</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Mode -->
+    <div class="form-control">
+      <label class="label py-1"><span class="label-text text-xs">Mode</span></label>
+      <select name="rule_mode" class="select select-bordered select-xs" onchange="toggleCountingFields(this)">
+        <option value="detection"    {% if not rule.pk or rule.mode == 'detection' %}selected{% endif %}>Detection (default)</option>
+        <option value="crowd"        {% if rule.mode == 'crowd' %}selected{% endif %}>Crowd Detection</option>
+        <option value="people_count" {% if rule.mode == 'people_count' %}selected{% endif %}>People Counting (line crossing)</option>
+      </select>
+    </div>
+
+    <!-- Counting settings — shown when mode = crowd or people_count -->
+    <div class="counting-fields border border-base-300 rounded-lg p-3 space-y-3 bg-base-200/40"
+         {% if not rule.pk or rule.mode == 'detection' %}style="display:none"{% endif %}>
+      <div class="text-xs font-semibold uppercase tracking-wide text-base-content/40">Counting Settings</div>
+
+      <!-- Threshold —
+           Direction is configured once in the ROI section (ROI Type → Crossing Line → Direction) -->
+      <div class="form-control">
+        <label class="label py-1">
+          <span class="label-text text-xs">Threshold</span>
+          <span class="label-text-alt text-xs text-base-content/40 threshold-hint">
+            {% if rule.mode == 'crowd' %}trigger when people in ROI ≥{% else %}trigger when crossing count ≥{% endif %}
+          </span>
+        </label>
+        <input type="number" name="count_threshold" class="input input-bordered input-xs"
+               value="{{ rule.count_threshold|default:0 }}" min="0" placeholder="e.g. 10">
+      </div>
+    </div>
+
+    <!-- Class Filter -->
+    <div class="form-control">
+      <label class="label py-1"><span class="label-text text-xs">Class Filter</span></label>
+      <div class="flex gap-2 items-start">
+        <select name="cls_operator" class="select select-bordered select-xs shrink-0">
+          <option value="in" {% if rule.cls_operator == 'in' or not rule.pk %}selected{% endif %}>IN</option>
+          <option value="not_in" {% if rule.cls_operator == 'not_in' %}selected{% endif %}>NOT IN</option>
+          <option value="eq" {% if rule.cls_operator == 'eq' %}selected{% endif %}>=</option>
+        </select>
+        <div class="cls-checkboxes border border-base-300 rounded p-2 text-xs flex flex-wrap gap-2 flex-1 min-h-8 bg-base-100"
+             data-selected="{{ rule.cls_ids|default:'[]' }}">
+          <span class="text-base-content/30 text-xs">Loading labels...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Processing + Trigger -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Processing</span></label>
+        <select name="processing" class="select select-bordered select-xs">
+          <option value="in_roi" {% if not rule.pk or rule.processing == 'in_roi' %}selected{% endif %}>in ROI</option>
+          <option value="detected" {% if rule.processing == 'detected' %}selected{% endif %}>detected (all)</option>
+        </select>
+      </div>
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Trigger</span></label>
+        <select name="trigger" class="select select-bordered select-xs" onchange="toggleAbsentDuration(this)">
+          <option value="present" {% if not rule.pk or rule.trigger == 'present' %}selected{% endif %}>detected (present)</option>
+          <option value="absent" {% if rule.trigger == 'absent' %}selected{% endif %}>absent / missing</option>
+        </select>
+        <div class="text-xs text-base-content/40 mt-1 trigger-hint">
+          {% if rule.trigger == 'absent' %}Fire when NOT detected for the duration below.{% else %}Fire when detected matching conditions above.{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Duration + Cooldown -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="form-control">
+        <label class="label py-1">
+          <span class="label-text text-xs">Duration</span>
+          <span class="label-text-alt text-xs text-base-content/40 duration-mode-hint">
+            {% if rule.trigger == 'absent' %}absent for ≥{% else %}present for{% endif %}
+          </span>
+        </label>
+        <div class="flex gap-1 items-center">
+          <select name="duration_op" class="select select-bordered select-xs" onchange="toggleDuration(this)">
+            <option value="immediate" {% if not rule.pk or rule.duration_op == 'immediate' %}selected{% endif %}>immediate</option>
+            <option value="gte" {% if rule.duration_op == 'gte' %}selected{% endif %}>≥</option>
+            <option value="lte" {% if rule.duration_op == 'lte' %}selected{% endif %}>≤</option>
+            <option value="eq" {% if rule.duration_op == 'eq' %}selected{% endif %}>=</option>
+          </select>
+          <input type="number" name="duration_seconds" class="input input-bordered input-xs w-16 duration-sec"
+                 value="{{ rule.duration_seconds|default:0 }}"
+                 {% if not rule.pk or rule.duration_op == 'immediate' %}style="display:none"{% endif %}>
+          <span class="text-xs text-base-content/50 duration-label"
+                {% if not rule.pk or rule.duration_op == 'immediate' %}style="display:none"{% endif %}>sec</span>
+        </div>
+      </div>
+      <div class="form-control">
+        <label class="label py-1"><span class="label-text text-xs">Cooldown</span><span class="label-text-alt text-xs text-base-content/40">seconds</span></label>
+        <input type="number" name="cooldown_seconds" class="input input-bordered input-xs"
+               value="{{ rule.cooldown_seconds|default:60 }}" min="0">
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CARD 2: SCHEDULE & ACTIONS -->
+  <div class="border border-base-300 rounded-lg p-3 space-y-3">
+    <div class="text-xs font-semibold uppercase tracking-wide text-base-content/40">Schedule &amp; Actions</div>
+
+    <!-- Cron Schedule -->
+    <div class="form-control">
+      <label class="label py-1">
+        <span class="label-text text-xs">Cron Schedule</span>
+        <span class="label-text-alt text-xs text-base-content/40">min hour dom month dow</span>
+      </label>
+      <div class="flex gap-2 items-center">
+        <input type="text" name="cron_schedule" class="input input-bordered input-xs w-44 cron-input"
+               value="{{ rule.cron_schedule|default:'* * * * *' }}"
+               oninput="updateCronPreview(this)">
+        <span class="text-xs text-primary cron-preview bg-primary/10 rounded px-2 py-1">Always active</span>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="form-control">
+      <label class="label py-1"><span class="label-text text-xs">Actions — when this rule fires</span></label>
+      <div class="flex flex-wrap gap-4">
+        <label class="cursor-pointer flex items-center gap-2">
+          <input type="checkbox" name="action_telegram" class="checkbox checkbox-xs"
+                 {% if rule.action_telegram %}checked{% endif %}>
+          <span class="text-xs">Send Telegram</span>
+        </label>
+        <label class="cursor-pointer flex items-center gap-2">
+          <input type="checkbox" name="action_redis" class="checkbox checkbox-xs"
+                 {% if rule.action_redis %}checked{% endif %}>
+          <span class="text-xs">Publish to Queue</span>
+        </label>
+        <label class="cursor-pointer flex items-center gap-2">
+          <input type="checkbox" name="action_snapshot" class="checkbox checkbox-xs"
+                 {% if not rule.pk or rule.action_snapshot %}checked{% endif %}>
+          <span class="text-xs">Save Snapshot</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Message Template -->
+    <div class="form-control">
+      <label class="label py-1"><span class="label-text text-xs">Message Template</span><span class="label-text-alt text-xs text-base-content/40">optional</span></label>
+      <input type="text" name="message_template" class="input input-bordered input-xs"
+             value="{{ rule.message_template|default:'' }}"
+             placeholder="🚨 {in_roi_count} object(s) detected at {time}">
+      <div class="flex flex-wrap gap-x-2 gap-y-1 mt-1 items-center">
+        <span class="text-[10px] text-base-content/40">placeholders:</span>
+        <code class="msg-ph">{count}</code>
+        <code class="msg-ph">{in_roi_count}</code>
+        <code class="msg-ph">{time}</code>
+        <code class="msg-ph">{camera_name}</code>
+        <code class="msg-ph">{camera_id}</code>
+        <code class="msg-ph">{job_id}</code>
+        <code class="msg-ph">{category}</code>
+        <code class="msg-ph">{crowd_count}</code>
+        <code class="msg-ph">{crossing_in}</code>
+        <code class="msg-ph">{crossing_out}</code>
+        <code class="msg-ph">{violations}</code>
+      </div>
+    </div>
+
+    <!-- Active + Priority -->
+    <div class="flex items-center gap-6">
+      <label class="cursor-pointer flex items-center gap-2">
+        <input type="checkbox" name="is_active" class="checkbox checkbox-xs"
+               {% if not rule.pk or rule.is_active %}checked{% endif %}>
+        <span class="text-xs">Active</span>
+      </label>
+      <div class="form-control flex-row items-center gap-2">
+        <label class="label py-0"><span class="label-text text-xs">Priority</span></label>
+        <input type="number" name="priority" class="input input-bordered input-xs w-20"
+               value="{{ rule.priority|default:100 }}" title="Lower = higher priority">
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function toggleCountingFields(sel) {
+  var root = sel.closest('.col-span-full');
+  var card = root.querySelector('.counting-fields');
+  var hint = root.querySelector('.threshold-hint');
+  if (sel.value === 'detection') {
+    card.style.display = 'none';
+  } else {
+    card.style.display = '';
+    if (hint) hint.textContent = sel.value === 'crowd'
+      ? 'trigger when people in ROI \u2265'
+      : 'trigger when crossing count \u2265';
+  }
+}
+
+</script>

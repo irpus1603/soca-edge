@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../soca-engine"
+		},
+		{
+			"path": "../socaedge"
+		}
+	],
+	"settings": {}
+}

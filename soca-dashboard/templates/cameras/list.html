@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Cameras — SOCA{% endblock %}
+{% block page_title %}Cameras{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-xl font-bold">Camera List</h2>
+      <p class="text-sm opacity-60">{{ cameras|length }} camera{% if cameras|length != 1 %}s{% endif %} registered</p>
+    </div>
+    <a href="{% url 'camera_create' %}" class="btn btn-primary btn-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      Add Camera
+    </a>
+  </div>
+
+  <!-- Table -->
+  <div class="card bg-base-100 shadow">
+    <div class="card-body p-0">
+      {% if cameras %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead class="bg-base-200/60">
+            <tr>
+              <th class="text-xs font-semibold text-base-content/60">Name</th>
+              <th class="text-xs font-semibold text-base-content/60">Site</th>
+              <th class="text-xs font-semibold text-base-content/60">Floor</th>
+              <th class="text-xs font-semibold text-base-content/60">Location</th>
+              <th class="text-xs font-semibold text-base-content/60">RTSP URL</th>
+              <th class="text-xs font-semibold text-base-content/60">Status</th>
+              <th class="text-right text-xs font-semibold text-base-content/60">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cam in cameras %}
+            <tr class="hover border-b border-base-200">
+              <td class="font-semibold">{{ cam.name }}</td>
+              <td class="text-sm text-base-content/70">{{ cam.site_name|default:"—" }}</td>
+              <td class="text-sm text-base-content/70">{{ cam.floor|default:"—" }}</td>
+              <td class="text-sm text-base-content/70">{{ cam.location|default:"—" }}</td>
+              <td class="font-mono text-xs max-w-xs truncate text-base-content/50" title="{{ cam.rtsp_url }}">{{ cam.rtsp_url }}</td>
+              <td>
+                {% if cam.is_active %}
+                  <span class="badge badge-success badge-sm">Active</span>
+                {% else %}
+                  <span class="badge badge-neutral badge-sm">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="flex gap-2 justify-end">
+                  <a href="{% url 'camera_edit' cam.pk %}" class="btn btn-ghost btn-xs">Edit</a>
+                  <button onclick="document.getElementById('del-cam-{{ cam.pk }}').showModal()" class="btn btn-ghost btn-xs text-error">Delete</button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-16 opacity-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        <p class="text-sm">No cameras added yet</p>
+        <a href="{% url 'camera_create' %}" class="btn btn-primary btn-sm mt-3">Add your first camera</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Delete Modals -->
+{% for cam in cameras %}
+<dialog id="del-cam-{{ cam.pk }}" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Delete Camera</h3>
+    <p class="py-4">Are you sure you want to delete <strong>{{ cam.name }}</strong>? This will also remove it from MediaMTX configuration.</p>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
+      <form method="post" action="{% url 'camera_delete' cam.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-error">Delete</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endfor %}
+{% endblock %}

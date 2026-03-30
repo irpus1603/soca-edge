@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+.AppleDouble
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+*.env.local
+
+# Runtime data
+*.db
+*.sqlite3
+soca-engine/snapshots/
+soca-engine/dlq/
+soca-engine/credentials/
+soca-engine/config.json
+
+# Docker
+docker-compose.override.yml
+
+soca-dashboard/credentials/
+soca-dashboard/.claude/
+soca-dashboard/.claude-plan/
+soca-dashboard/.superpowers/
+soca-dashboard/.superpowers/
+soca-dashboard/db.sqlite3
+
+soca-engine/yolo/
+soca-engine/claude-plan/
+soca-engine/.ptest_cache/
+soca-engine/.claude
+soca-engine/credentials/
+

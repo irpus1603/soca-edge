@@ -1,0 +1,744 @@
+{% extends "base.html" %}
+{% block title %}Settings — SOCA{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+
+  <h2 class="text-xl font-bold">System Settings</h2>
+
+  <!-- Tabs -->
+  <div role="tablist" class="tabs tabs-boxed bg-base-100">
+    <a role="tab" id="tab-users" class="tab tab-active" onclick="showTab('users', this)">Users</a>
+    <a role="tab" id="tab-branding" class="tab" onclick="showTab('branding', this)">Branding</a>
+    <a role="tab" id="tab-edge" class="tab" onclick="showTab('edge', this)">Edge Config</a>
+    <a role="tab" id="tab-telegram" class="tab" onclick="showTab('telegram', this)">Telegram</a>
+    <a role="tab" id="tab-operations" class="tab" onclick="showTab('operations', this)">Operations</a>
+    <a role="tab" id="tab-models" class="tab" onclick="showTab('models', this)">AI Models</a>
+  </div>
+
+  <!-- Users Tab -->
+  <div id="panel-users" class="space-y-4">
+
+    <!-- User Table -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">User Accounts</h3>
+        {% if users %}
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Last Login</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in users %}
+              <tr>
+                <td class="font-medium">
+                  {{ u.username }}
+                  {% if u == request.user %}<span class="badge badge-primary badge-xs ml-1">you</span>{% endif %}
+                </td>
+                <td>
+                  {% if u.role == 'admin' %}<span class="badge badge-warning badge-xs">Admin</span>
+                  {% elif u.role == 'operator' %}<span class="badge badge-info badge-xs">Operator</span>
+                  {% else %}<span class="badge badge-ghost badge-xs">Viewer</span>{% endif %}
+                </td>
+                <td class="font-mono text-xs opacity-60">{{ u.last_login|default:"Never" }}</td>
+                <td class="text-right">
+                  {% if u != request.user %}
+                  <button onclick="document.getElementById('del-user-{{ u.pk }}').showModal()" class="btn btn-ghost btn-xs text-error">Delete</button>
+                  {% else %}
+                  <span class="text-xs opacity-30">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-sm opacity-50">No users found.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Add User Form -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">Add New User</h3>
+        <form method="post" action="{% url 'user_create' %}">
+          {% csrf_token %}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Username <span class="text-error">*</span></span></label>
+              <input type="text" name="username" placeholder="newuser" class="input input-bordered" required />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Password <span class="text-error">*</span></span></label>
+              <input type="password" name="password" placeholder="••••••••" class="input input-bordered" required />
+            </div>
+          </div>
+          <div class="form-control mt-3">
+            <label class="label"><span class="label-text font-medium">Role</span></label>
+            <select name="role" class="select select-bordered">
+              <option value="viewer">Viewer</option>
+              <option value="operator">Operator</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary btn-sm">Create User</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram Tab -->
+  <div id="panel-telegram" class="space-y-4" style="display:none">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-1">Global Telegram Notifications</h3>
+        <p class="text-sm opacity-60 mb-4">
+          Bot token and chat ID used by all schedules that don't set a custom webhook URL.
+          Create a bot via <a href="https://t.me/BotFather" target="_blank" class="link">@BotFather</a>,
+          then obtain your chat ID from <a href="https://t.me/userinfobot" target="_blank" class="link">@userinfobot</a>.
+        </p>
+        <form method="post" action="{% url 'edge_settings' %}">
+          {% csrf_token %}
+          <!-- hidden fields to preserve other EdgeConfig values -->
+          <input type="hidden" name="edge_name" value="{{ edge.edge_name|default:'edge-1' }}" />
+          <input type="hidden" name="engine_url" value="{{ edge.engine_url|default:'http://localhost:8001' }}" />
+          <input type="hidden" name="mediamtx_url" value="{{ edge.mediamtx_url|default:'http://localhost:8888' }}" />
+          <input type="hidden" name="mediamtx_rtsp_url" value="{{ edge.mediamtx_rtsp_url|default:'rtsp://localhost:8554' }}" />
+          <input type="hidden" name="mediamtx_yml_path" value="{{ edge.mediamtx_yml_path|default:'../soca-engine/MediaMTX/mediamtx.yml' }}" />
+          <input type="hidden" name="engine_env_path" value="{{ edge.engine_env_path|default:'../soca-engine/.env' }}" />
+          <input type="hidden" name="engine_db_path" value="{{ edge.engine_db_path|default:'' }}" />
+          <input type="hidden" name="snapshots_root" value="{{ edge.snapshots_root|default:'' }}" />
+          <input type="hidden" name="redis_stream" value="{{ edge.redis_stream|default:'soca:detections' }}" />
+          <input type="hidden" name="publisher_type" value="{{ edge.publisher_type|default:'redis' }}" />
+          <input type="hidden" name="pubsub_project_id" value="{{ edge.pubsub_project_id|default:'' }}" />
+          <input type="hidden" name="pubsub_topic" value="{{ edge.pubsub_topic|default:'soca-detections' }}" />
+          <input type="hidden" name="address" value="{{ edge.address|default:'' }}" />
+          <input type="hidden" name="building" value="{{ edge.building|default:'' }}" />
+          <input type="hidden" name="floor" value="{{ edge.floor|default:'' }}" />
+          <input type="hidden" name="site_notes" value="{{ edge.site_notes|default:'' }}" />
+          <input type="hidden" name="latitude" value="{{ edge.latitude|default:'' }}" />
+          <input type="hidden" name="longitude" value="{{ edge.longitude|default:'' }}" />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Bot Token</span></label>
+              <input type="text" name="telegram_bot_token"
+                value="{{ edge.telegram_bot_token|default:'' }}"
+                placeholder="123456789:AABBcc..."
+                class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">From @BotFather — keep this secret</span></label>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Chat ID</span></label>
+              <input type="text" name="telegram_chat_id"
+                value="{{ edge.telegram_chat_id|default:'' }}"
+                placeholder="-1001234567890 or 123456789"
+                class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">Group/channel (negative) or personal (positive)</span></label>
+            </div>
+          </div>
+          <div class="mt-2 mb-3">
+            <p class="text-xs opacity-50">
+              Message text is set per-schedule in the "Alert Message Template" field.
+              If a schedule has a custom Telegram Webhook URL, it takes priority over this global config.
+            </p>
+          </div>
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary btn-sm">Save Telegram Config</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Branding Tab -->
+  <div id="panel-branding" class="space-y-4" style="display:none">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">Branding</h3>
+        <form method="post" action="{% url 'site_branding_save' %}" enctype="multipart/form-data" class="space-y-4">
+          {% csrf_token %}
+          <div class="flex flex-col sm:flex-row gap-4 items-start">
+            {# Current logo #}
+            <div class="shrink-0">
+              {% if site_config.company_logo %}
+              <img src="{{ site_config.company_logo.url }}" alt="Logo" class="object-contain rounded border border-base-300 bg-base-200 p-1" style="height:{{ site_config.logo_height }}px; max-width:120px">
+              {% else %}
+              <div class="h-16 w-16 rounded border border-base-300 bg-base-200 flex items-center justify-center text-base-content/30 text-xs">No logo</div>
+              {% endif %}
+            </div>
+            <div class="flex-1 space-y-3">
+              <div class="form-control">
+                <label class="label py-1"><span class="label-text text-sm">Company Name</span></label>
+                <input type="text" name="company_name" value="{{ site_config.company_name }}" class="input input-bordered input-sm" required>
+              </div>
+              <div class="form-control">
+                <label class="label py-1"><span class="label-text text-sm">Application Name</span></label>
+                <input type="text" name="app_name" value="{{ site_config.app_name }}" class="input input-bordered input-sm" required>
+              </div>
+              <div class="form-control">
+                <label class="label py-1"><span class="label-text text-sm">Logo Height (px)</span></label>
+                <input type="number" name="logo_height" value="{{ site_config.logo_height }}" min="16" max="200" class="input input-bordered input-sm w-28">
+              </div>
+              <div class="form-control">
+                <label class="label py-1"><span class="label-text text-sm">Company Logo</span><span class="label-text-alt text-xs text-base-content/40">PNG / SVG / JPG recommended</span></label>
+                <input type="file" name="company_logo" accept="image/*" class="file-input file-input-bordered file-input-sm w-full max-w-xs">
+              </div>
+              {% if site_config.company_logo %}
+              <label class="cursor-pointer flex items-center gap-2 text-sm text-error">
+                <input type="checkbox" name="clear_logo" class="checkbox checkbox-xs checkbox-error">
+                Remove current logo
+              </label>
+              {% endif %}
+            </div>
+          </div>
+          <div><button type="submit" class="btn btn-primary btn-sm">Save Branding</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edge Config Tab -->
+  <div id="panel-edge" class="space-y-4" style="display:none">
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">Edge Configuration</h3>
+        <form method="post" action="{% url 'edge_settings' %}" enctype="multipart/form-data">
+          {% csrf_token %}
+
+          <p class="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Connection</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Edge Name</span></label>
+              <input type="text" name="edge_name" value="{{ edge.edge_name|default:'edge-1' }}" class="input input-bordered" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Engine URL</span></label>
+              <input type="text" name="engine_url" value="{{ edge.engine_url|default:'http://localhost:8001' }}" placeholder="http://localhost:8001" class="input input-bordered font-mono text-sm" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">MediaMTX URL</span></label>
+              <input type="text" name="mediamtx_url" value="{{ edge.mediamtx_url|default:'http://localhost:8888' }}" placeholder="http://localhost:8888" class="input input-bordered font-mono text-sm" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">MediaMTX RTSP URL</span></label>
+              <input type="text" name="mediamtx_rtsp_url" value="{{ edge.mediamtx_rtsp_url|default:'rtsp://localhost:8554' }}" placeholder="rtsp://localhost:8554" class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">RTSP relay base URL — soca-engine connects here instead of direct camera</span></label>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">MediaMTX Config Path</span></label>
+              <input type="text" name="mediamtx_yml_path" value="{{ edge.mediamtx_yml_path|default:'../soca-engine/MediaMTX/mediamtx.yml' }}" placeholder="/path/to/mediamtx.yml" class="input input-bordered font-mono text-sm" />
+            </div>
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Engine .env Path</span></label>
+              <input type="text" name="engine_env_path" value="{{ edge.engine_env_path|default:'../soca-engine/.env' }}" placeholder="../soca-engine/.env" class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">EDGE_NAME will be written here when you save</span></label>
+            </div>
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Engine DB Path</span></label>
+              <input type="text" name="engine_db_path" value="{{ edge.engine_db_path|default:'' }}"
+                placeholder="/opt/soca-engine/db.sqlite3"
+                class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">Used by purge tool to delete old detection records</span></label>
+            </div>
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Snapshots Root</span></label>
+              <input type="text" name="snapshots_root" value="{{ edge.snapshots_root|default:'' }}"
+                placeholder="/opt/soca-engine/snapshots"
+                class="input input-bordered font-mono text-sm" />
+              <label class="label"><span class="label-text-alt opacity-60">Used by purge tool to delete old snapshot image files</span></label>
+            </div>
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Redis Stream</span></label>
+              <input type="text" name="redis_stream" class="input input-bordered input-sm font-mono text-sm"
+                     value="{{ edge.redis_stream|default:'soca:detections' }}"
+                     placeholder="soca:detections">
+              <label class="label"><span class="label-text-alt text-xs text-base-content/40">Stream name used by rules that publish to Redis</span></label>
+            </div>
+            <!-- Publisher Transport -->
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Publisher Transport</span></label>
+              <select name="publisher_type" id="publisher-type-select"
+                      class="select select-bordered select-sm w-48"
+                      onchange="togglePubSubFields(this.value)">
+                <option value="redis" {% if edge.publisher_type != 'pubsub' %}selected{% endif %}>Redis Stream</option>
+                <option value="pubsub" {% if edge.publisher_type == 'pubsub' %}selected{% endif %}>Google Pub/Sub</option>
+              </select>
+              <label class="label"><span class="label-text-alt text-xs text-base-content/40">Where to publish detection events</span></label>
+            </div>
+            <div id="pubsub-fields" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"
+                 style="{% if edge.publisher_type != 'pubsub' %}display:none{% endif %}">
+              <div class="form-control">
+                <label class="label"><span class="label-text font-medium">GCP Project ID</span></label>
+                <input type="text" name="pubsub_project_id"
+                       value="{{ edge.pubsub_project_id|default:'' }}"
+                       placeholder="my-gcp-project"
+                       class="input input-bordered input-sm font-mono" />
+              </div>
+              <div class="form-control">
+                <label class="label"><span class="label-text font-medium">Pub/Sub Topic</span></label>
+                <input type="text" name="pubsub_topic"
+                       value="{{ edge.pubsub_topic|default:'soca-detections' }}"
+                       placeholder="soca-detections"
+                       class="input input-bordered input-sm font-mono" />
+                <label class="label"><span class="label-text-alt text-xs text-base-content/40">Topic name only — not full projects/…/topics/… path</span></label>
+              </div>
+              <!-- GCS Key -->
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">GCS Service Account Key</span>
+                  {% if edge.gcs_key_path %}<span class="label-text-alt text-xs text-success">● {{ edge.gcs_key_path|slice:"-35:" }}</span>{% endif %}
+                </label>
+                <input type="hidden" name="gcs_key_path" value="{{ edge.gcs_key_path|default:'' }}">
+                <input type="file" name="gcs_file" accept=".json"
+                       class="file-input file-input-bordered file-input-sm w-full font-mono" />
+                <label class="label">
+                  <span class="label-text-alt text-xs text-base-content/40">Service account key for Google Cloud Storage snapshot uploads.</span>
+                </label>
+              </div>
+              <!-- Pub/Sub Key -->
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">Pub/Sub Service Account Key</span>
+                  {% if edge.pubsub_key_path %}<span class="label-text-alt text-xs text-success">● {{ edge.pubsub_key_path|slice:"-35:" }}</span>{% endif %}
+                </label>
+                <input type="hidden" name="pubsub_key_path" value="{{ edge.pubsub_key_path|default:'' }}">
+                <input type="file" name="pubsub_file" accept=".json"
+                       class="file-input file-input-bordered file-input-sm w-full font-mono" />
+                <label class="label">
+                  <span class="label-text-alt text-xs text-base-content/40">Service account key for Google Pub/Sub detection publishing.</span>
+                </label>
+              </div>
+              <!-- GCS bucket + prefix -->
+              <div class="form-control">
+                <label class="label"><span class="label-text font-medium">GCS Bucket</span></label>
+                <input type="text" name="gcs_bucket" value="{{ edge.gcs_bucket|default:'' }}"
+                       placeholder="soca-snapshot-bucket" class="input input-bordered input-sm font-mono" />
+              </div>
+              <div class="form-control">
+                <label class="label"><span class="label-text font-medium">GCS Path Prefix</span></label>
+                <input type="text" name="gcs_path_prefix" value="{{ edge.gcs_path_prefix|default:'' }}"
+                       placeholder="edge-bekasi" class="input input-bordered input-sm font-mono" />
+              </div>
+              <!-- Engine API Key -->
+              <div class="form-control md:col-span-2">
+                <label class="label">
+                  <span class="label-text font-medium">Engine API Key</span>
+                </label>
+                <input type="text" name="engine_api_key" value="{{ edge.engine_api_key|default:'' }}"
+                       placeholder="ENGINE_API_KEY set on soca-engine"
+                       class="input input-bordered input-sm font-mono w-full" />
+                <label class="label">
+                  <span class="label-text-alt text-xs text-base-content/40">Must match ENGINE_API_KEY in soca-engine's .env or config.json. Required to push config.</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <p class="text-xs font-semibold uppercase tracking-wider opacity-50 mb-3">Site Information <span class="normal-case font-normal opacity-60">(exposed via <code class="font-mono">/api/edge-info/</code>)</span></p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Address</span></label>
+              <input type="text" name="address" value="{{ edge.address|default:'' }}" placeholder="Jl. Sudirman No. 1, Jakarta" class="input input-bordered" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Building</span></label>
+              <input type="text" name="building" value="{{ edge.building|default:'' }}" placeholder="Gedung A" class="input input-bordered" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Floor</span></label>
+              <input type="text" name="floor" value="{{ edge.floor|default:'' }}" placeholder="Lantai 3" class="input input-bordered" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Latitude</span></label>
+              <input type="number" step="any" name="latitude" value="{{ edge.latitude|default:'' }}" placeholder="-6.2088" class="input input-bordered font-mono" />
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text font-medium">Longitude</span></label>
+              <input type="number" step="any" name="longitude" value="{{ edge.longitude|default:'' }}" placeholder="106.8456" class="input input-bordered font-mono" />
+            </div>
+            <div class="form-control md:col-span-2">
+              <label class="label"><span class="label-text font-medium">Notes</span></label>
+              <textarea name="site_notes" rows="2" placeholder="Additional location details..." class="textarea textarea-bordered">{{ edge.site_notes|default:'' }}</textarea>
+            </div>
+          </div>
+
+          {% if edge %}<p class="text-xs opacity-40 mt-4">Last updated: {{ edge.updated_at }}</p>{% endif %}
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary btn-sm">Save Edge Config</button>
+          </div>
+        </form>
+          <div class="mt-4 flex items-center gap-4">
+            <form method="post" action="{% url 'push_to_engine' %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-secondary btn-sm">&#9654; Push to soca-engine</button>
+            </form>
+            <span class="text-xs text-base-content/50">
+              {% if edge.last_engine_push_at %}
+                Last pushed: {{ edge.last_engine_push_at|date:"Y-m-d H:i" }}
+                {% if edge.last_engine_push_ok %}
+                  <span class="text-success">&#10003;</span>
+                {% else %}
+                  <span class="text-error">&#10007; failed</span>
+                {% endif %}
+              {% else %}
+                Never pushed
+              {% endif %}
+            </span>
+          </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operations Tab -->
+  <div id="panel-operations" class="space-y-6" style="display:none">
+
+    <!-- API Access -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">API Access</h3>
+        <p class="text-sm opacity-60 mb-4">
+          Share this key with soca-control to allow remote schedule control and purge.
+          Regenerating will invalidate any existing soca-control connection.
+        </p>
+
+        <div class="flex items-center gap-3 mb-4">
+          <input type="password" id="api-key-display"
+            value="{{ edge.api_key|default:'' }}"
+            class="input input-bordered font-mono text-sm flex-1" readonly />
+          <button type="button" onclick="toggleKey()" class="btn btn-ghost btn-sm">Reveal</button>
+          <button type="button" onclick="copyKey()" class="btn btn-ghost btn-sm">Copy</button>
+        </div>
+
+        <form method="post" action="{% url 'generate_api_key' %}"
+              onsubmit="return confirm('Regenerate API key? soca-control will lose access until you update the key there.')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning btn-sm">Regenerate Key</button>
+        </form>
+
+        <div class="mt-4 text-xs opacity-50 space-y-1">
+          <p class="font-semibold uppercase tracking-wide mb-2">Available API Endpoints</p>
+          <p><code>GET  /api/v1/schedules/</code> — list schedules with status</p>
+          <p><code>POST /api/v1/schedules/&lt;id&gt;/start/</code> — start a schedule</p>
+          <p><code>POST /api/v1/schedules/&lt;id&gt;/stop/</code> — stop a schedule</p>
+          <p><code>GET  /api/v1/purge/preview/?older_than=&lt;days&gt;</code> — preview purge</p>
+          <p><code>POST /api/v1/purge/execute/</code> — execute purge</p>
+          <p class="mt-2">All endpoints require: <code>Authorization: Api-Key &lt;token&gt;</code></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Purge Edge Data -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-1">Purge Edge Data</h3>
+        <p class="text-sm opacity-60 mb-4">
+          Permanently delete old detection records from soca-engine's database and snapshot image files from disk.
+          Configure Engine DB Path and Snapshots Root in the Edge Config tab first.
+        </p>
+
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+          <select id="purge-age" class="select select-bordered select-sm">
+            <option value="30">Older than 1 month</option>
+            <option value="90">Older than 3 months</option>
+            <option value="180">Older than 6 months</option>
+            <option value="365">Older than 1 year</option>
+          </select>
+          <button type="button" onclick="previewPurge()" class="btn btn-sm btn-outline">Preview</button>
+          <button type="button" id="purge-btn" onclick="document.getElementById('confirm-purge-modal').showModal()"
+            class="btn btn-sm btn-error" disabled>Purge Now</button>
+        </div>
+
+        <div id="purge-preview-result" class="text-sm opacity-70 mb-2"></div>
+      </div>
+    </div>
+
+    <!-- Schedule Remote Control -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-3">Schedule Control</h3>
+        <div id="schedule-table-wrap">
+          <p class="text-sm opacity-40">Loading...</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- AI Models Tab -->
+  <div id="panel-models" class="space-y-6" style="display:none">
+
+    <!-- Upload -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h3 class="card-title text-base mb-1">Upload Model</h3>
+        <p class="text-xs text-base-content/50 mb-4">
+          Upload YOLO model files (<code>.pt</code>, <code>.onnx</code>) or label files (<code>.yml</code>) directly to soca-engine's <code>yolo/</code> folder.
+        </p>
+        <form method="post" action="{% url 'model_upload' %}" enctype="multipart/form-data"
+              class="flex items-end gap-3 flex-wrap">
+          {% csrf_token %}
+          <div class="form-control flex-1 min-w-48">
+            <label class="label py-1"><span class="label-text text-sm">Model File</span></label>
+            <input type="file" name="model_file" accept=".pt,.onnx,.yml,.yaml"
+                   class="file-input file-input-bordered file-input-sm w-full" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm shrink-0">Upload</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Model List -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="card-title text-base">Models on Engine</h3>
+          <button type="button" onclick="loadModels()" class="btn btn-ghost btn-xs">&#8635; Refresh</button>
+        </div>
+        <div id="models-table-wrap">
+          <p class="text-sm opacity-40">Click the tab to load models.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Purge confirmation modal -->
+  <dialog id="confirm-purge-modal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg text-error">Confirm Purge</h3>
+      <p id="purge-confirm-text" class="py-4 text-sm"></p>
+      <div class="modal-action">
+        <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
+        <button type="button" onclick="executePurge()" class="btn btn-error">Confirm Purge</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+</div>
+
+<!-- Delete User Modals -->
+{% for u in users %}
+{% if u != request.user %}
+<dialog id="del-user-{{ u.pk }}" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Delete User</h3>
+    <p class="py-4">Are you sure you want to delete user <strong>{{ u.username }}</strong>? This cannot be undone.</p>
+    <div class="modal-action">
+      <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
+      <form method="post" action="{% url 'user_delete' u.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-error">Delete</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{% endif %}
+{% endfor %}
+
+<script>
+const ALL_TABS = ['users', 'branding', 'edge', 'telegram', 'operations', 'models'];
+
+function togglePubSubFields(val) {
+  document.getElementById('pubsub-fields').style.display = val === 'pubsub' ? '' : 'none';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showTab(name, el) {
+  if (name !== 'operations' && typeof schedulePoller !== 'undefined') {
+    clearInterval(schedulePoller);
+    schedulePoller = null;
+  }
+  ALL_TABS.forEach(t => {
+    document.getElementById('panel-' + t).style.display = 'none';
+    document.getElementById('tab-' + t).classList.remove('tab-active');
+  });
+  document.getElementById('panel-' + name).style.display = '';
+  el.classList.add('tab-active');
+  if (name === 'operations') loadScheduleTable();
+  if (name === 'models') loadModels();
+}
+
+function toggleKey() {
+  const el = document.getElementById('api-key-display');
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function copyKey() {
+  const val = document.getElementById('api-key-display').value;
+  navigator.clipboard.writeText(val).then(() => alert('API key copied.')).catch(() => alert('Copy failed. Please select and copy manually.'));
+}
+
+// Purge
+let purgePreviewData = null;
+
+function previewPurge() {
+  const days = document.getElementById('purge-age').value;
+  const resultEl = document.getElementById('purge-preview-result');
+  const btn = document.getElementById('purge-btn');
+  resultEl.textContent = 'Loading...';
+  btn.disabled = true;
+  purgePreviewData = null;
+
+  fetch(`/settings/operations/purge/preview/?older_than=${days}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        resultEl.textContent = 'Error: ' + data.error;
+        return;
+      }
+      purgePreviewData = data;
+      const mb = (data.disk_bytes / 1048576).toFixed(1);
+      resultEl.textContent =
+        `${data.record_count.toLocaleString()} detection records · ` +
+        `${data.file_count.toLocaleString()} snapshot files · ` +
+        `${mb} MB will be freed`;
+      document.getElementById('purge-confirm-text').textContent = resultEl.textContent;
+      btn.disabled = false;
+    })
+    .catch(() => { resultEl.textContent = 'Request failed.'; });
+}
+
+function executePurge() {
+  document.getElementById('confirm-purge-modal').close();
+  if (!purgePreviewData) return;
+  const days = document.getElementById('purge-age').value;
+  const resultEl = document.getElementById('purge-preview-result');
+  resultEl.textContent = 'Purging...';
+  document.getElementById('purge-btn').disabled = true;
+
+  fetch('/settings/operations/purge/execute/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({older_than: parseInt(days)}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { resultEl.textContent = 'Error: ' + data.error; return; }
+      const mb = (data.freed_bytes / 1048576).toFixed(1);
+      resultEl.textContent =
+        `Done: ${data.deleted_records.toLocaleString()} records deleted, ` +
+        `${data.deleted_files.toLocaleString()} files removed, ` +
+        `${mb} MB freed` +
+        (data.skipped_files ? ` (${data.skipped_files} skipped)` : '');
+      purgePreviewData = null;
+    })
+    .catch(() => { resultEl.textContent = 'Request failed.'; });
+}
+
+// Schedule table
+let schedulePoller = null;
+
+function loadScheduleTable() {
+  fetch('/settings/operations/schedules/')
+    .then(r => r.json())
+    .then(renderScheduleTable)
+    .catch(() => {
+      document.getElementById('schedule-table-wrap').innerHTML =
+        '<p class="text-sm text-error">Failed to load schedules.</p>';
+    });
+
+  clearInterval(schedulePoller);
+  schedulePoller = setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    fetch('/settings/operations/schedules/')
+      .then(r => r.json())
+      .then(renderScheduleTable)
+      .catch(() => {});
+  }, 10000);
+}
+
+function renderScheduleTable(data) {
+  const wrap = document.getElementById('schedule-table-wrap');
+  if (!data.length) {
+    wrap.innerHTML = '<p class="text-sm opacity-40">No schedules configured.</p>';
+    return;
+  }
+  const rows = data.map(s => {
+    const badge = s.status === 'running'
+      ? '<span class="badge badge-success badge-sm">Running</span>'
+      : s.status === 'unknown'
+      ? '<span class="badge badge-warning badge-sm">Unknown</span>'
+      : '<span class="badge badge-ghost badge-sm">Stopped</span>';
+    const startBtn = `<form method="post" action="/schedules/${s.id}/start/" style="display:inline">
+      <input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">
+      <button class="btn btn-xs btn-success" ${s.status === 'running' ? 'disabled' : ''}>Start</button></form>`;
+    const stopBtn = `<form method="post" action="/schedules/${s.id}/stop/" style="display:inline">
+      <input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">
+      <button class="btn btn-xs btn-error" ${s.status !== 'running' ? 'disabled' : ''}>Stop</button></form>`;
+    return `<tr>
+      <td class="font-medium">${escHtml(s.name)}</td>
+      <td class="opacity-60">${escHtml(s.camera_name)}</td>
+      <td>${badge}</td>
+      <td class="space-x-1">${startBtn} ${stopBtn}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<div class="overflow-x-auto"><table class="table table-sm">
+    <thead><tr><th>Schedule</th><th>Camera</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}
+
+function loadModels() {
+  const wrap = document.getElementById('models-table-wrap');
+  wrap.innerHTML = '<p class="text-sm opacity-40">Loading…</p>';
+  fetch('{% url "models_list_proxy" %}')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { wrap.innerHTML = `<p class="text-sm text-error">${escHtml(data.error)}</p>`; return; }
+      renderModels(data.models || []);
+    })
+    .catch(() => { wrap.innerHTML = '<p class="text-sm text-error">Failed to reach soca-engine.</p>'; });
+}
+
+function renderModels(models) {
+  const wrap = document.getElementById('models-table-wrap');
+  if (!models.length) {
+    wrap.innerHTML = '<p class="text-sm opacity-40">No model files found in yolo/ folder.</p>';
+    return;
+  }
+  const extBadge = ext => {
+    if (ext === '.pt')   return '<span class="badge badge-primary badge-xs">PT</span>';
+    if (ext === '.onnx') return '<span class="badge badge-secondary badge-xs">ONNX</span>';
+    return '<span class="badge badge-ghost badge-xs">YML</span>';
+  };
+  const fmtSize = b => b >= 1048576 ? (b/1048576).toFixed(1)+' MB' : (b/1024).toFixed(1)+' KB';
+  const rows = models.map(m => `<tr>
+    <td class="font-mono text-sm">${escHtml(m.name)}</td>
+    <td>${extBadge(m.ext)}</td>
+    <td class="opacity-60 text-xs">${fmtSize(m.size)}</td>
+    <td class="text-right">
+      <form method="post" action="/settings/models/${encodeURIComponent(m.name)}/delete/"
+            style="display:inline"
+            onsubmit="return confirm('Delete ' + ${JSON.stringify(m.name)} + '?')">
+        <input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">
+        <button class="btn btn-ghost btn-xs text-error">Delete</button>
+      </form>
+    </td>
+  </tr>`).join('');
+  wrap.innerHTML = `<div class="overflow-x-auto"><table class="table table-sm">
+    <thead><tr><th>Filename</th><th>Type</th><th>Size</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+</script>
+{% endblock %}

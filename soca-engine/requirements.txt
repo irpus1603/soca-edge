@@ -1,0 +1,17 @@
+fastapi==0.115.11
+python-multipart==0.0.20
+uvicorn[standard]==0.42.0
+ultralytics==8.4.24
+opencv-python-headless==4.10.0.84
+numpy==2.2.6
+sqlalchemy==2.0.23
+redis==5.0.8
+pydantic==2.11.10
+python-dotenv==1.0.0
+httpx==0.28.1
+psutil==6.1.1
+croniter==3.0.3
+pyyaml==6.0.2
+easyocr
+google-cloud-pubsub>=2.21
+google-cloud-storage>=2.14

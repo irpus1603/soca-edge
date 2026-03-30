@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Alert Statistics — SOCA{% endblock %}
+{% block page_title %}Alerts &amp; Snapshots{% endblock %}
+
+{% block content %}
+{{ charts|json_script:"chart-data" }}
+<div class="space-y-4">
+
+  <!-- Tab nav -->
+  <div class="flex items-center justify-between">
+    <div class="tabs tabs-bordered">
+      <a href="{% url 'alerts' %}?camera={{ camera_filter }}&date_from={{ date_from }}&date_to={{ date_to }}&location={{ location_filter }}&category={{ category_filter }}&message={{ message_filter }}&plate={{ plate_filter }}"
+         class="tab">Alerts</a>
+      <a href="{% url 'alerts_stats' %}?camera={{ camera_filter }}&date_from={{ date_from }}&date_to={{ date_to }}&location={{ location_filter }}&category={{ category_filter }}&message={{ message_filter }}&plate={{ plate_filter }}"
+         class="tab tab-active font-semibold">Statistics</a>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body py-3">
+      <form method="get" action="">
+        <div class="flex flex-wrap gap-3 items-end">
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">Camera</span></label>
+            <select name="camera" class="select select-bordered select-sm">
+              <option value="">All Cameras</option>
+              {% for cam in cameras_list %}
+              <option value="{{ cam }}" {% if camera_filter == cam %}selected{% endif %}>{{ cam }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">From Date</span></label>
+            <input type="date" name="date_from" value="{{ date_from }}" class="input input-bordered input-sm" />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">To Date</span></label>
+            <input type="date" name="date_to" value="{{ date_to }}" class="input input-bordered input-sm" />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">Location</span></label>
+            <input type="text" name="location" value="{{ location_filter }}" placeholder="e.g. Lobby" class="input input-bordered input-sm w-32" />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">Category</span></label>
+            <input type="text" name="category" value="{{ category_filter }}" placeholder="e.g. fire" class="input input-bordered input-sm w-32" />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">Message</span></label>
+            <input type="text" name="message" value="{{ message_filter }}" placeholder="free text" class="input input-bordered input-sm w-32" />
+          </div>
+
+          <div class="form-control">
+            <label class="label py-0"><span class="label-text text-xs">Plate</span></label>
+            <input type="text" name="plate" value="{{ plate_filter }}" placeholder="e.g. B1234" class="input input-bordered input-sm w-28" />
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Search
+          </button>
+
+          {% if camera_filter or date_from or date_to or location_filter or category_filter or message_filter or plate_filter %}
+          <a href="{% url 'alerts_stats' %}" class="btn btn-ghost btn-sm">Clear</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title text-xs">Total Events</div>
+      <div class="stat-value text-primary">{{ summary.total }}</div>
+      <div class="stat-desc">matching filters</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title text-xs">Last 24 Hours</div>
+      <div class="stat-value text-secondary">{{ summary.today }}</div>
+      <div class="stat-desc">recent activity</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title text-xs">Top Category</div>
+      <div class="stat-value text-sm font-mono truncate">
+        {% if summary.top_category %}
+          {% with cat=summary.top_category|lower %}
+          <span class="badge badge-lg
+            {% if 'fire' in cat or 'smoke' in cat %}badge-error
+            {% elif 'intrusion' in cat or 'trespass' in cat %}badge-warning
+            {% elif 'crowd' in cat %}badge-accent
+            {% elif 'lpr' in cat or 'plate' in cat %}badge-secondary
+            {% else %}badge-info{% endif %}">{{ summary.top_category }}</span>
+          {% endwith %}
+        {% else %}
+        <span class="text-base-content/30">—</span>
+        {% endif %}
+      </div>
+      <div class="stat-desc">highest volume</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow-sm">
+      <div class="stat-title text-xs">Top Camera</div>
+      <div class="stat-value text-sm font-semibold truncate">{{ summary.top_camera|default:"—" }}</div>
+      <div class="stat-desc">most active</div>
+    </div>
+  </div>
+
+  {% if summary.total > 0 %}
+
+  <!-- Daily Trend + Hourly Distribution -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm font-semibold text-base-content/80">Daily Event Trend</h3>
+        <div class="relative h-56">
+          <canvas id="chart-daily"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm font-semibold text-base-content/80">Hourly Distribution (GMT+7)</h3>
+        <div class="relative h-56">
+          <canvas id="chart-hourly"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Category + Camera -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm font-semibold text-base-content/80">Events by Category</h3>
+        {% if charts.category.labels %}
+        <div class="relative h-56">
+          <canvas id="chart-category"></canvas>
+        </div>
+        {% else %}
+        <p class="text-sm text-base-content/40 text-center py-10">No category data</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h3 class="card-title text-sm font-semibold text-base-content/80">Events by Camera</h3>
+        {% if charts.camera.labels %}
+        <div class="relative h-56">
+          <canvas id="chart-camera"></canvas>
+        </div>
+        {% else %}
+        <p class="text-sm text-base-content/40 text-center py-10">No camera data</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  {% else %}
+  <div class="card bg-base-100 shadow-sm">
+    <div class="text-center py-16 text-base-content/40">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      <p class="text-sm">No events found for the selected filters</p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var raw = JSON.parse(document.getElementById('chart-data').textContent);
+
+  // Colors safe for canvas (Chart.js cannot parse oklch from CSS vars directly)
+  var palette = {
+    primary:   { bg: 'rgba(99,102,241,0.75)',  border: 'rgb(99,102,241)' },   // indigo
+    secondary: { bg: 'rgba(168,85,247,0.75)',  border: 'rgb(168,85,247)' },   // violet
+    error:     { bg: 'rgba(239,68,68,0.85)',   border: 'rgb(239,68,68)' },    // red
+    warning:   { bg: 'rgba(245,158,11,0.85)',  border: 'rgb(245,158,11)' },   // amber
+    accent:    { bg: 'rgba(20,184,166,0.85)',  border: 'rgb(20,184,166)' },   // teal
+    info:      { bg: 'rgba(14,165,233,0.75)',  border: 'rgb(14,165,233)' },   // sky
+  };
+  var multiColors = [
+    palette.error.border, palette.warning.border, palette.accent.border,
+    palette.secondary.border, palette.info.border, palette.primary.border,
+    '#f97316', '#84cc16', '#ec4899', '#06b6d4'
+  ];
+  var multiBg = multiColors.map(function(c) {
+    return c.replace('rgb(', 'rgba(').replace(')', ',0.8)');
+  });
+  var gridColor  = 'rgba(0,0,0,0.07)';
+  var labelColor = 'rgba(0,0,0,0.45)';
+
+  var defaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { color: labelColor, maxRotation: 45 } },
+      y: { grid: { color: gridColor }, ticks: { color: labelColor }, beginAtZero: true }
+    }
+  };
+
+  // Daily trend bar chart
+  var dailyEl = document.getElementById('chart-daily');
+  if (dailyEl) {
+    if (raw.daily && raw.daily.labels && raw.daily.labels.length) {
+      new Chart(dailyEl, {
+        type: 'bar',
+        data: {
+          labels: raw.daily.labels,
+          datasets: [{
+            label: 'Events',
+            data: raw.daily.data,
+            backgroundColor: palette.primary.bg,
+            borderColor: palette.primary.border,
+            borderWidth: 1,
+            borderRadius: 3,
+          }]
+        },
+        options: defaults
+      });
+    } else {
+      dailyEl.parentElement.innerHTML = '<p class="text-sm text-base-content/40 text-center py-10">No daily data</p>';
+    }
+  }
+
+  // Hourly distribution bar chart
+  var hourlyEl = document.getElementById('chart-hourly');
+  if (hourlyEl && raw.hourly && raw.hourly.labels) {
+    new Chart(hourlyEl, {
+      type: 'bar',
+      data: {
+        labels: raw.hourly.labels,
+        datasets: [{
+          label: 'Events',
+          data: raw.hourly.data,
+          backgroundColor: palette.secondary.bg,
+          borderColor: palette.secondary.border,
+          borderWidth: 1,
+          borderRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: labelColor, maxRotation: 0, font: { size: 10 } } },
+          y: { grid: { color: gridColor }, ticks: { color: labelColor }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // Category doughnut chart
+  var catEl = document.getElementById('chart-category');
+  if (catEl && raw.category && raw.category.labels && raw.category.labels.length) {
+    new Chart(catEl, {
+      type: 'doughnut',
+      data: {
+        labels: raw.category.labels,
+        datasets: [{
+          data: raw.category.data,
+          backgroundColor: multiBg.slice(0, raw.category.labels.length),
+          borderColor: multiColors.slice(0, raw.category.labels.length),
+          borderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: { color: 'rgba(0,0,0,0.6)', boxWidth: 12, font: { size: 11 } }
+          }
+        },
+        cutout: '58%',
+      }
+    });
+  }
+
+  // Camera horizontal bar chart
+  var camEl = document.getElementById('chart-camera');
+  if (camEl && raw.camera && raw.camera.labels && raw.camera.labels.length) {
+    new Chart(camEl, {
+      type: 'bar',
+      data: {
+        labels: raw.camera.labels,
+        datasets: [{
+          label: 'Events',
+          data: raw.camera.data,
+          backgroundColor: palette.info.bg,
+          borderColor: palette.info.border,
+          borderWidth: 1,
+          borderRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: labelColor }, beginAtZero: true },
+          y: { grid: { color: gridColor }, ticks: { color: labelColor } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

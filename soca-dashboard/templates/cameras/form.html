@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{% if camera %}Edit{% else %}New{% endif %} Camera — SOCA{% endblock %}
+{% block page_title %}{% if camera %}Edit Camera{% else %}New Camera{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+  <div class="flex items-center gap-2 mb-4">
+    <a href="{% url 'camera_list' %}" class="btn btn-ghost btn-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Back
+    </a>
+    <span class="text-sm opacity-50">/</span>
+    <span class="text-sm">{% if camera %}Edit "{{ camera.name }}"{% else %}New Camera{% endif %}</span>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title mb-4">{% if camera %}Edit Camera{% else %}Add New Camera{% endif %}</h2>
+
+      <form method="post" action="">
+        {% csrf_token %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Camera Name <span class="text-error">*</span></span></label>
+            <input type="text" name="name" value="{{ camera.name|default:'' }}" placeholder="e.g. cam-lobby-01" class="input input-bordered" required />
+            <label class="label"><span class="label-text-alt opacity-60">Unique identifier for this camera</span></label>
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Site Name</span></label>
+            <input type="text" name="site_name" value="{{ camera.site_name|default:'' }}" placeholder="e.g. Building A" class="input input-bordered" />
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Floor</span></label>
+            <input type="text" name="floor" value="{{ camera.floor|default:'' }}" placeholder="e.g. 2nd Floor" class="input input-bordered" />
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Location</span></label>
+            <input type="text" name="location" value="{{ camera.location|default:'' }}" placeholder="e.g. Main Entrance" class="input input-bordered" />
+          </div>
+        </div>
+
+        <div class="form-control mt-4">
+          <label class="label"><span class="label-text font-medium">RTSP URL <span class="text-error">*</span></span></label>
+          <input type="text" name="rtsp_url" value="{{ camera.rtsp_url|default:'' }}" placeholder="rtsp://192.168.1.100:554/stream1" class="input input-bordered font-mono text-sm" required />
+          <label class="label"><span class="label-text-alt opacity-60">Full RTSP stream URL</span></label>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Username</span></label>
+            <input type="text" name="username" value="{{ camera.username|default:'' }}" placeholder="admin" class="input input-bordered" autocomplete="off" />
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text font-medium">Password</span></label>
+            <input type="password" name="password" value="{{ camera.password|default:'' }}" placeholder="••••••••" class="input input-bordered" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="form-control mt-4">
+          <label class="label cursor-pointer justify-start gap-3">
+            <input type="checkbox" name="is_active" class="checkbox checkbox-primary" {% if camera.is_active or not camera %}checked{% endif %} />
+            <span class="label-text font-medium">Active</span>
+          </label>
+          <label class="label"><span class="label-text-alt opacity-60">Inactive cameras are excluded from job scheduling</span></label>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="flex gap-3 justify-end">
+          <a href="{% url 'camera_list' %}" class="btn btn-ghost">Cancel</a>
+          <button type="submit" class="btn btn-primary">
+            {% if camera %}Save Changes{% else %}Create Camera{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
